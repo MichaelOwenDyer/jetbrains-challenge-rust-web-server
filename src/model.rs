@@ -10,7 +10,7 @@ pub struct BlogPost {
     image_url: Option<String>,
     username: String,
     avatar_url: Option<String>,
-    date: time::OffsetDateTime,
+    date: time::Date,
 }
 
 /// A blog post creation request.
@@ -30,7 +30,7 @@ impl BlogPost {
             image_url: create.image_url,
             username: create.username,
             avatar_url: create.avatar_url,
-            date: time::OffsetDateTime::now_utc(),
+            date: time::OffsetDateTime::now_utc().date()
         }
     }
 }
