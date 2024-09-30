@@ -8,11 +8,19 @@ lto = true
 codegen-units = 1
 
 [dependencies]
-axum = { version = "0.7.7", features = ["macros"] }
+clap = { version = "4.5.18", features = ["derive"] }
+dotenvy = "0.15.7"
 leptos = "0.6.15"
-serde = { version = "1.0.210", features = ["derive"] }
-sqlx = { version = "0.8.2", features = ["runtime-tokio-native-tls", "sqlite"] }
-time = { version = "0.3.36", features = ["serde"] }
+axum = { version = "0.7.7", features = ["macros"] }
 tokio = { version = "1.40.0", features = ["full"] }
+derive_more = { version = "1.0.0", features = ["from", "display"] }
+serde = { version = "1.0.210", features = ["derive"] }
+time = { version = "0.3.36", features = ["serde"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
+tower-http = { version = "0.6.1", features = ["fs", "set-header"] }
+uuid = { version = "1.10.0", features = ["v4", "serde"] }
+anyhow = "1.0.89"
+diesel = { version = "2.2.4", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "time", "r2d2"] }
+diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
+r2d2 = "0.8.10"
