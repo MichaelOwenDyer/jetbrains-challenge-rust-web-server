@@ -19,7 +19,7 @@ async fn get_posts(
     State(controller): State<Arc<Database>>,
 ) -> Result<(StatusCode, Json<Vec<BlogPost>>), AppError> {
     debug!("--> get_posts");
-    let posts = controller.fetch_all()?;
+    let posts = controller.fetch_all().await?;
     debug!("<-- get_posts {:?}", posts);
     Ok((StatusCode::OK, Json(posts)))
 }
@@ -30,7 +30,7 @@ async fn create_post(
     Json(create_post): Json<BlogPostCreateRequest>,
 ) -> Result<(StatusCode, Json<BlogPost>), AppError> {
     debug!("--> create_post {:?}", create_post);
-    let post = controller.save(create_post)?;
+    let post = controller.save(create_post).await?;
     debug!("<-- create_post {:?}", post);
     Ok((StatusCode::CREATED, Json(post)))
 }

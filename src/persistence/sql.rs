@@ -44,10 +44,9 @@ impl Database {
     fn connect(&self) -> Result<r2d2::PooledConnection<ConnectionManager<SqliteConnection>>, DatabaseError> {
         self.0.get().map_err(DatabaseError::Connection)
     }
-    pub(crate) fn save(&self, post: BlogPostCreateRequest) -> Result<BlogPost, DatabaseError> {
+    pub(crate) async fn save(&self, post: BlogPostCreateRequest) -> Result<BlogPost, DatabaseError> {
         use crate::persistence::schema::blog_post::dsl::blog_post;
         trace!("Saving blog post: {:?}", post);
-        let connection = &mut self.connect()?;
         let values = InsertBlogPost {
             posted_on: time::OffsetDateTime::now_utc().date(),
             text: post.text,
@@ -56,19 +55,28 @@ impl Database {
             avatar_uuid: post.avatar_url.map(|_| Uuid::new_v4().to_string())
         };
         trace!("Inserting values: {:?}", values);
-        diesel::insert_into(blog_post)
-            .values(&values)
-            .returning(BlogPost::as_returning())
-            .get_result(connection)
-            .map_err(DatabaseError::Sql)
+        let mut connection = self.connect()?;
+        tokio::task::spawn_blocking(move || {
+            diesel::insert_into(blog_post)
+                .values(&values)
+                .returning(BlogPost::as_returning())
+                .get_result(&mut connection)
+                .map_err(DatabaseError::Sql)
+        })
+            .await
+            .unwrap() // Diesel shouldn't ever panic
     }
-    pub(crate) fn fetch_all(&self) -> Result<Vec<BlogPost>, DatabaseError> {
+    pub(crate) async fn fetch_all(&self) -> Result<Vec<BlogPost>, DatabaseError> {
         use crate::persistence::schema::blog_post::dsl::blog_post;
         trace!("Loading blog posts");
-        let connection = &mut self.connect()?;
-        blog_post
-            .select(BlogPost::as_select())
-            .load(connection)
-            .map_err(DatabaseError::Sql)
+        let mut connection = self.connect()?;
+        tokio::task::spawn_blocking(move || {
+            blog_post
+                .select(BlogPost::as_select())
+                .load(&mut connection)
+                .map_err(DatabaseError::Sql)
+        })
+            .await
+            .unwrap() // Diesel shouldn't ever panic
     }
 }

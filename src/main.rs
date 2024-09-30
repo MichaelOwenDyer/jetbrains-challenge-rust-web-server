@@ -1,7 +1,6 @@
 use crate::persistence::sql::Database;
 use axum::Router;
 use clap::Parser;
-use std::env;
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 
@@ -34,12 +33,12 @@ async fn main() -> anyhow::Result<()> {
 
     let database_url = match args.database_url {
         Some(database_url) => database_url,
-        None => env::var("DATABASE_URL")?,
+        None => std::env::var("DATABASE_URL")?,
     };
-    let controller = Database::try_connect(&database_url).await?;
+    let database = Database::try_connect(&database_url).await?;
 
     let app = Router::new()
-        .merge(routes::posts::create_router(controller))
+        .merge(routes::posts::create_router(database))
         .merge(routes::images::create_router());
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", args.port)).await?;
