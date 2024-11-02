@@ -1,26 +1,46 @@
 [package]
-name = "jetbrains-challenge"
+name = "blogposts"
 version = "0.1.0"
+authors = ["Michael Dyer <michaelowendyer@gmail.com>"]
 edition = "2021"
 
-[profile.release]
-lto = true
-codegen-units = 1
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.18", features = ["derive"] }
-dotenvy = "0.15.7"
-leptos = "0.6.15"
-axum = { version = "0.7.7", features = ["macros"] }
-tokio = { version = "1.40.0", features = ["full"] }
-derive_more = { version = "1.0.0", features = ["from", "display"] }
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { version = "1.0.197", features = ["derive"] }
+dioxus = { version = "0.5", features = ["fullstack", "router"] }
+dioxus-logger = "0.5.1" # Contains logging abstraction over tracing
 time = { version = "0.3.36", features = ["serde"] }
-tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
-tower-http = { version = "0.6.1", features = ["fs", "set-header"] }
-uuid = { version = "1.10.0", features = ["v4", "serde"] }
-anyhow = "1.0.89"
-diesel = { version = "2.2.4", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "time", "r2d2"] }
-diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
-r2d2 = "0.8.10"
+tracing = { version = "0.1.40" }
+uuid = { version = "1.10.0", features = ["v4", "serde", "js"] }
+derive_more = { version = "1.0.0", features = ["from", "display", "error"] }
+dotenvy = "0.15.7"
+image = "0.25.4"
+base64 = "0.22.1"
+
+# Server-only dependencies
+tokio = { version = "1.40.0", optional = true }
+axum = { version = "0.7.7", features = ["macros"], optional = true }
+diesel = { version = "2.2.4", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "time", "r2d2"], optional = true }
+diesel_migrations = { version = "2.2.0", features = ["sqlite"], optional = true }
+r2d2 = { version = "0.8.10", optional = true }
+http = { version = "1.1.0", optional = true }
+reqwest = { version = "0.12.8", optional = true }
+futures = { version = "0.3.31", optional = true }
+tower-http = { version = "0.6.1", features = ["trace"] }
+
+[features]
+server = [
+    "tokio",
+    "axum",
+    "dioxus/axum",
+    "diesel",
+    "diesel_migrations",
+    "r2d2",
+    "http",
+    "reqwest",
+    "futures",
+]
+web = [
+    "dioxus/web",
+]
