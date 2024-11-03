@@ -67,7 +67,7 @@ impl Database {
     /// Save a new blog post to the database.
     /// Returns the saved `BlogPost` if successful, or `DatabaseError::Sql` if the query fails.
     pub async fn save(&self, to_persist: InsertBlogPost) -> Result<BlogPost, DatabaseError> {
-        debug!("Persisting values: {:?}", to_persist);
+        debug!("Saving blog post: {:?}", to_persist);
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut connection = pool.get()?;

@@ -17,29 +17,27 @@ pub struct CreateBlogPostParams {
     pub avatar_url: Option<String>,
 }
 
-/// The UUID of a blog post image which is saved in the file system.
+/// The file system path of a blog post image.
+/// This is a newtype around a `String`, which is the UUID of the image.
+/// The UUID is persisted to the database, and is used to load the image from the file system later.
+/// We cannot use the `Uuid` type directly because SQLite does not support it with Diesel.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "server",
     derive(diesel::FromSqlRow, diesel::AsExpression),
     diesel(sql_type = diesel::sql_types::Text)
 )]
-pub struct PostImageUuid {
-    /// The UUID describing the save location of this image in the file system.
-    /// We cannot use the `Uuid` type directly because SQLite does not support it with Diesel.
-    pub uuid: String,
-}
+pub struct PostImagePath(pub String);
 
-/// The UUID of an avatar image which is saved in the file system.
+/// The file system path of an avatar image.
+/// This is a newtype around a `String`, which is the UUID of the image.
+/// The UUID is persisted to the database, and is used to load the image from the file system later.
+/// We cannot use the `Uuid` type directly because SQLite does not support it with Diesel.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "server",
     derive(diesel::FromSqlRow, diesel::AsExpression),
     diesel(sql_type = diesel::sql_types::Text)
 )]
-pub struct AvatarImageUuid {
-    /// The UUID describing the save location of this image in the file system.
-    /// We cannot use the `Uuid` type directly because SQLite does not support it with Diesel.
-    pub uuid: String,
-}
+pub struct AvatarImagePath(pub String);
 
 #[cfg(feature = "server")]
 pub use server::*;
@@ -47,7 +45,7 @@ pub use server::*;
 /// Server-specific models and functionality.
 #[cfg(feature = "server")]
 mod server {
-    use super::{AvatarImageUuid, PostImageUuid};
+    use super::{AvatarImagePath, PostImagePath};
     use diesel::{backend::Backend, deserialize, serialize, sql_types::Text};
 
     /// Implement the necessary Diesel traits for an image UUID newtype.
@@ -61,7 +59,7 @@ mod server {
                     &'b self,
                     out: &mut serialize::Output<'b, '_, B>,
                 ) -> serialize::Result {
-                    self.uuid.to_sql(out)
+                    self.0.to_sql(out)
                 }
             }
 
@@ -71,14 +69,14 @@ mod server {
             {
                 fn from_sql(bytes: B::RawValue<'_>) -> deserialize::Result<Self> {
                     let uuid = String::from_sql(bytes)?;
-                    Ok($name { uuid })
+                    Ok($name(uuid))
                 }
             }
         };
     }
 
-    impl_image!(PostImageUuid);
-    impl_image!(AvatarImageUuid);
+    impl_image!(PostImagePath);
+    impl_image!(AvatarImagePath);
 
     /// Insertable data for a blog post.
     #[derive(Debug, diesel::Insertable)]
@@ -87,16 +85,16 @@ mod server {
         pub posted_on: time::Date,
         pub text: String,
         pub username: String,
-        pub image_uuid: Option<PostImageUuid>,
-        pub avatar_uuid: Option<AvatarImageUuid>,
+        pub image_uuid: Option<PostImagePath>,
+        pub avatar_uuid: Option<AvatarImagePath>,
     }
 
     impl InsertBlogPost {
         pub fn new(
             text: String,
             username: String,
-            image_uuid: Option<PostImageUuid>,
-            avatar_uuid: Option<AvatarImageUuid>,
+            image_uuid: Option<PostImagePath>,
+            avatar_uuid: Option<AvatarImagePath>,
         ) -> Self {
             Self {
                 posted_on: time::OffsetDateTime::now_utc().date(),
@@ -124,6 +122,6 @@ pub struct BlogPost {
     pub posted_on: time::Date,
     pub text: String,
     pub username: String,
-    pub image_uuid: Option<PostImageUuid>,
-    pub avatar_uuid: Option<AvatarImageUuid>,
+    pub image_uuid: Option<PostImagePath>,
+    pub avatar_uuid: Option<AvatarImagePath>,
 }

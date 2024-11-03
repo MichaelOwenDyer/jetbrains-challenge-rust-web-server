@@ -1,6 +1,7 @@
 use client::Webapp;
 use tracing::info;
 
+mod api;
 mod client;
 mod model;
 #[cfg(feature = "server")]
@@ -26,7 +27,7 @@ fn main() {
 /// - If the HOST_ADDR environment variable is not set.
 /// - If the server fails to connect to the database with the specified URL.
 /// - If the server fails to open a TCP listener on the specified host address.
-/// - If the server fails to start.
+/// - If the axum server fails to start.
 #[cfg(all(feature = "server", not(feature = "web")))]
 #[tokio::main]
 async fn main() {
@@ -53,7 +54,12 @@ async fn main() {
     let database = Database::try_connect(&database_url)
         .await
         .inspect(|_| info!("Connected to database at {}", database_url))
-        .unwrap_or_else(|err| panic!("Failed to connect to database at '{}': {}", database_url, err));
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to connect to database at '{}': {}",
+                database_url, err
+            )
+        });
 
     // Open a TCP listener on the specified host address
     let listener = tokio::net::TcpListener::bind(&host_addr)
@@ -63,10 +69,7 @@ async fn main() {
 
     // Create the router service using the Dioxus application router
     let router_service = Router::new()
-        .serve_dioxus_application(
-            ServeConfig::builder().build(), 
-            || VirtualDom::new(Webapp)
-        )
+        .serve_dioxus_application(ServeConfig::builder().build(), || VirtualDom::new(Webapp))
         .await
         // This allows us to extract the database from the request extensions
         .layer(Extension(ServerState { database }))

@@ -1,6 +1,6 @@
 //! Image processing utilities for the server.
 
-use crate::model::{AvatarImageUuid, PostImageUuid};
+use crate::model::{AvatarImagePath, PostImagePath};
 use image::{DynamicImage, ImageError, ImageFormat, ImageReader};
 use std::fmt::Debug;
 use std::path::PathBuf;
@@ -11,9 +11,9 @@ use uuid::Uuid;
 /// Errors that can occur when processing images.
 #[derive(Debug, derive_more::From, derive_more::Display, derive_more::Error)]
 pub enum AppImageError {
-    #[display("Error downloading image: {}", _0)]
+    #[display("Download error: {}", _0)]
     Download(reqwest::Error),
-    #[display("Error decoding image: {}", _0)]
+    #[display("Image error: {}", _0)]
     Decode(ImageError),
     #[display("IO error: {}", _0)]
     Io(std::io::Error),
@@ -39,37 +39,33 @@ fn image_path(dir: &str, uuid: &str) -> PathBuf {
     .into()
 }
 
-/// The `ImageUuid` trait is used to abstract over the different types of images that can be saved.
-pub trait ImageUuid: Debug + Send + 'static {
+/// The `ImagePath` trait is used to abstract over the different locations where images are stored.
+pub trait ImagePath: Debug + Send + 'static {
     fn new(uuid: Uuid) -> Self;
     fn path(&self) -> PathBuf;
 }
 
-impl ImageUuid for PostImageUuid {
+impl ImagePath for PostImagePath {
     fn new(uuid: Uuid) -> Self {
-        PostImageUuid {
-            uuid: uuid.to_string(),
-        }
+        PostImagePath(uuid.to_string())
     }
 
     /// Post images are stored in the `images/posts` directory.
     /// Returns the path to the image file on the file system.
     fn path(&self) -> PathBuf {
-        image_path("posts", &self.uuid)
+        image_path("posts", &self.0)
     }
 }
 
-impl ImageUuid for AvatarImageUuid {
+impl ImagePath for AvatarImagePath {
     fn new(uuid: Uuid) -> Self {
-        AvatarImageUuid {
-            uuid: uuid.to_string(),
-        }
+        AvatarImagePath(uuid.to_string())
     }
 
     /// Avatars are stored in the `images/avatars` directory.
     /// Returns the path to the image file on the file system.
     fn path(&self) -> PathBuf {
-        image_path("avatars", &self.uuid)
+        image_path("avatars", &self.0)
     }
 }
 
@@ -78,7 +74,7 @@ impl ImageUuid for AvatarImageUuid {
 pub async fn process_images(
     post_image_bytes: Option<Vec<u8>>,
     avatar_url: Option<String>,
-) -> Result<(Option<PostImageUuid>, Option<AvatarImageUuid>), AppImageError> {
+) -> Result<(Option<PostImagePath>, Option<AvatarImagePath>), AppImageError> {
     match (post_image_bytes, avatar_url) {
         (None, None) => {
             debug!("No images to process");
@@ -87,20 +83,20 @@ pub async fn process_images(
         (Some(post_image), None) => {
             debug!("Processing post image");
             let image = process_image(post_image).await?;
-            let image_uuid = save(image).await?;
-            Ok((Some(image_uuid), None))
+            let image_path = save(image).await?;
+            Ok((Some(image_path), None))
         }
         (None, Some(avatar_url)) => {
             debug!("Processing avatar image");
             let avatar = process_avatar(avatar_url).await?;
-            let avatar_uuid = save(avatar).await?;
-            Ok((None, Some(avatar_uuid)))
+            let avatar_path = save(avatar).await?;
+            Ok((None, Some(avatar_path)))
         }
         (Some(post_image), Some(avatar_url)) => {
             debug!("Processing post and avatar images");
             let (image, avatar) = try_join!(process_image(post_image), process_avatar(avatar_url))?;
-            let (image_uuid, avatar_uuid) = try_join!(save(image), save(avatar))?;
-            Ok((Some(image_uuid), Some(avatar_uuid)))
+            let (image_path, avatar_path) = try_join!(save(image), save(avatar))?;
+            Ok((Some(image_path), Some(avatar_path)))
         }
     }
 }
@@ -108,6 +104,7 @@ pub async fn process_images(
 /// Validate that the bytes are a PNG image, if present.
 async fn process_image(bytes: Vec<u8>) -> Result<DynamicImage, AppImageError> {
     let image = decode(bytes).await?;
+    // Do more processing here if needed, e.g. resizing
     Ok(image)
 }
 
@@ -115,6 +112,7 @@ async fn process_image(bytes: Vec<u8>) -> Result<DynamicImage, AppImageError> {
 async fn process_avatar(url: String) -> Result<DynamicImage, AppImageError> {
     let bytes = download(url).await?;
     let image = decode(bytes).await?;
+    // Do more processing here if needed, e.g. resizing
     Ok(image)
 }
 
@@ -135,16 +133,18 @@ async fn decode(image_bytes: Vec<u8>) -> Result<DynamicImage, ImageError> {
 }
 
 /// Save the image to the file system.
+/// This creates a new UUID for the image, saves the image to the corresponding file path,
+/// and returns the UUID in the corresponding newtype.
 #[instrument(skip(image))]
-async fn save<I: ImageUuid>(image: DynamicImage) -> Result<I, AppImageError> {
+async fn save<Path: ImagePath>(image: DynamicImage) -> Result<Path, AppImageError> {
     tokio::task::spawn_blocking(move || {
-        let save = I::new(Uuid::new_v4());
-        let path = save.path();
+        let image_path = Path::new(Uuid::new_v4());
+        let path = image_path.path();
         // Create the directory if it doesn't exist
         // Safety: We know the parent directory exists because we are creating the path from the UUID
         std::fs::create_dir_all(path.parent().expect("parent dir should exist"))?;
         image.save(path)?;
-        Ok(save)
+        Ok(image_path)
     })
     .await
     .expect("saving should not panic")
@@ -152,24 +152,24 @@ async fn save<I: ImageUuid>(image: DynamicImage) -> Result<I, AppImageError> {
     .inspect_err(|e| warn!("Failed to save image: {}", e))
 }
 
-/// Loads an image from the file system if it exists.
+/// Loads the image from the file system with the provided UUID.
 #[instrument]
 #[rustfmt::skip]
-pub async fn load<I: ImageUuid>(image: &I) -> Result<Vec<u8>, AppImageError> {
-    let path = image.path();
+pub async fn load<I: ImagePath>(image_uuid: &I) -> Result<Vec<u8>, AppImageError> {
+    let path = image_uuid.path();
     tokio::task::spawn_blocking(move || std::fs::read(path))
         .await
         .expect("loading should not panic")
-        .inspect(|_| debug!("Loaded image from {}", image.path().display()))
-        .inspect_err(|e| warn!("Failed to load image from {}: {}", image.path().display(), e))
+        .inspect(|_| debug!("Loaded image from {}", image_uuid.path().display()))
+        .inspect_err(|e| warn!("Failed to load image from {}: {}", image_uuid.path().display(), e))
         .map_err(Into::into)
 }
 
 /// Deletes an image from the file system if it exists.
 /// This function accepts an optional for convenience (see call site).
 #[instrument]
-pub async fn delete<I: ImageUuid>(image: Option<&I>) -> Result<(), AppImageError> {
-    match image {
+pub async fn delete<I: ImagePath>(image_uuid: Option<&I>) -> Result<(), AppImageError> {
+    match image_uuid {
         None => Ok(()),
         #[rustfmt::skip]
         Some(image) => {
