@@ -1,9 +1,10 @@
-# Jetbrains Internship - Rust Web Application for Managing Test Data
-### Test Task 1
+# Jetbrains Internship - Rust Web Application for Managing Test Data - Test Task 1
 
-This is a fullstack blog post application built in Rust using Axum and Dioxus.
+## Project Overview
+This application allows users to create and view blog posts, complete with text, a publication date, an optional image, a username, and an optional user avatar.
+The application persists blog posts in an SQLite database and stores images locally on the file system.
 
-Here is the structure of the project:
+Here is the repository file structure:
 ```
 .
 ├── assets                  # Static assets for the application
@@ -32,8 +33,18 @@ Here is the structure of the project:
 
 ```
 
+Before doing anything else, you should create a `.env` file and configure it:
+```bash
+cp example.env .env
+```
+
+The `DATABASE_URL` environment variable is required, while `HOST_ADDR` and `LOG_LEVEL` are optional
+and default to `0.0.0.0:8080` and `INFO`, respectively.
+
 To run the application with Docker, run the following commands:
 ```bash
 docker build -t blogposts .
 docker run -p 8080:8080 blogposts
 ```
+
+Once running, the application can be accessed at `http://localhost:8080/home`.
