@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 
 /// API endpoint to fetch all blog posts.
 /// TODO: Implement pagination and streaming.
-#[server(FetchBlogPosts)]
+#[server(endpoint="fetch_blog_posts")]
 pub async fn fetch_blog_posts() -> Result<Vec<BlogPost>, ServerFnError> {
     use crate::server::Database;
     
@@ -20,7 +20,7 @@ pub async fn fetch_blog_posts() -> Result<Vec<BlogPost>, ServerFnError> {
 }
 
 /// API endpoint to create a blog post.
-#[server(CreateBlogPost)]
+#[server(endpoint="create_blog_post")]
 pub async fn create_blog_post(params: CreateBlogPostParams) -> Result<BlogPost, ServerFnError> {
     use crate::model::InsertBlogPost;
     use crate::server::{images, Database};
@@ -39,7 +39,7 @@ pub async fn create_blog_post(params: CreateBlogPostParams) -> Result<BlogPost, 
 }
 
 /// API endpoint to delete a blog post.
-#[server(DeleteBlogPost)]
+#[server(endpoint="delete_blog_post")]
 pub async fn delete_blog_post(post_id: BlogPostId) -> Result<(), ServerFnError> {
     use crate::server::{images, Database};
     
@@ -59,22 +59,22 @@ pub async fn delete_blog_post(post_id: BlogPostId) -> Result<(), ServerFnError> 
 
 /// API endpoint to fetch a post image.
 /// The image is returned as a base64-encoded string.
-#[server(LoadPostImage)]
+#[server(endpoint="load_post_image")]
 pub async fn load_post_image(uuid: PostImagePath) -> Result<String, ServerFnError> {
-    use base64::Engine;
+    use base64::{Engine, engine::general_purpose::STANDARD_NO_PAD as Base64};
     crate::server::images::load(&uuid)
         .await
-        .map(|bytes| base64::engine::general_purpose::STANDARD.encode(&bytes))
+        .map(|bytes| Base64.encode(&bytes))
         .map_err(Into::into)
 }
 
 /// API endpoint to fetch an avatar image.
 /// The image is returned as a base64-encoded string.
-#[server(LoadAvatarImage)]
+#[server(endpoint="load_avatar_image")]
 pub async fn load_avatar_image(uuid: AvatarImagePath) -> Result<String, ServerFnError> {
-    use base64::Engine;
+    use base64::{Engine, engine::general_purpose::STANDARD_NO_PAD as Base64};
     crate::server::images::load(&uuid)
         .await
-        .map(|bytes| base64::engine::general_purpose::STANDARD.encode(&bytes))
+        .map(|bytes| Base64.encode(&bytes))
         .map_err(Into::into)
 }

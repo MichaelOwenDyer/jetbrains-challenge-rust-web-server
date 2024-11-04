@@ -5,6 +5,7 @@ use crate::model::{BlogPost, CreateBlogPostParams};
 use dioxus::prelude::*;
 use dioxus_logger::tracing::{error, info};
 use std::borrow::Cow;
+use tracing::debug;
 
 /// The routes for the frontend application.
 /// / or /home -> HomePage
@@ -40,27 +41,34 @@ fn PageNotFound(route: Vec<String>) -> Element {
 
 #[component]
 fn HomePage() -> Element {
+    let mut fetch_blog_posts = use_resource(fetch_blog_posts);
     rsx! {
         div { class: "container",
             h1 { class: "header",
                 "Welcome to the blog"
             }
-            BlogPostForm {}
-            BlogPostFeed {}
+            BlogPostForm {
+                oncreate: move |_| fetch_blog_posts.restart(),
+            }
+            BlogPostFeed {
+                posts: fetch_blog_posts.read_unchecked().clone(),
+            }
         }
     }
 }
 
 #[component]
-fn BlogPostForm() -> Element {
+fn BlogPostForm(
+    oncreate: EventHandler<BlogPost>,
+) -> Element {
     let mut text_input = use_signal(String::new);
     let mut username_input = use_signal(String::new);
     let mut image_input = use_signal(|| None);
     let mut avatar_input = use_signal(String::new);
-    let mut message = use_signal(|| ("red", Cow::from("")));
+    let mut message = use_signal(|| ("red", None));
 
     let handle_submit = move |_| async move {
-        message.set(("yellow", Cow::from("Posting...")));
+        message.set(("yellow", Some(Cow::from("Posting..."))));
 
         let params = CreateBlogPostParams {
             text: text_input().clone(),
@@ -74,22 +82,23 @@ fn BlogPostForm() -> Element {
         };
 
         if let Err(msg) = params.validate() {
-            message.set(("red", Cow::from(msg)));
+            message.set(("red", Some(Cow::from(msg))));
             return;
         }
 
         match create_blog_post(params).await {
             Ok(post) => {
                 info!("Created post: {:?}", post);
-                message.set(("green", Cow::from("Post created!")));
+                message.set(("green", Some(Cow::from("Post created!"))));
                 text_input.set(String::new());
                 username_input.set(String::new());
                 image_input.set(None);
                 avatar_input.set(String::new());
+                oncreate(post);
             }
             Err(err) => {
                 error!("Failed to create post: {:?}", err);
-                message.set(("red", Cow::from(err.to_string())));
+                message.set(("red", Some(Cow::from(err.to_string()))));
             }
         }
     };
@@ -118,8 +127,8 @@ fn BlogPostForm() -> Element {
                 }
             }
 
-            // Image File Upload
             div {
+                // Image File Upload
                 input {
                     r#type: "file",
                     accept: "image/png",
@@ -128,9 +137,9 @@ fn BlogPostForm() -> Element {
                             if let Some(file_engine) = evt.files() {
                                 let files = file_engine.files();
                                 for file_name in &files {
-                                    info!("Client picked file: {:?}", file_name);
+                                    debug!("User picked file: {:?}", file_name);
                                     if let Some(bytes) = file_engine.read_file(file_name).await {
-                                        info!("Client read file with size: {}", bytes.len());
+                                        debug!("Uploaded {}B", bytes.len());
                                         image_input.set(Some(bytes));
                                     }
                                 }
@@ -138,10 +147,8 @@ fn BlogPostForm() -> Element {
                         }
                     },
                 }
-            }
 
-            // Avatar URL
-            div {
+                // Avatar URL
                 input {
                     r#type: "url",
                     value: "{avatar_input}",
@@ -167,37 +174,10 @@ fn BlogPostForm() -> Element {
                     onclick: handle_submit,
                     "Submit Post"
                 }
-                label { class: "error",
-                    color: "{message().0}",
-                    "{message().1}"
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn FileUpload(
-    accept: &'static str,
-    #[props(default = false)] multiple: bool,
-    onchange: EventHandler<Vec<u8>>,
-) -> Element {
-    rsx! {
-        input {
-            r#type: "file",
-            accept: accept,
-            multiple: multiple,
-            onchange: move |evt| {
-                async move {
-                    if let Some(file_engine) = evt.files() {
-                        let files = file_engine.files();
-                        for file_name in &files {
-                            info!("Client picked file: {:?}", file_name);
-                            if let Some(bytes) = file_engine.read_file(file_name).await {
-                                info!("Client read file with size: {}", bytes.len());
-                                onchange(bytes);
-                            }
-                        }
+                if let Some(error_msg) = message().1 {
+                    div { class: "error",
+                        color: "{message().0}",
+                        "{error_msg}"
                     }
                 }
             }
@@ -206,17 +186,23 @@ fn FileUpload(
 }
 
 #[component]
-fn BlogPostFeed() -> Element {
-    let fetch_posts = use_resource(fetch_blog_posts);
-
-    match &*fetch_posts.read_unchecked() {
-        Some(Ok(posts)) => rsx! {
-            div {
-                h1 { "Blog Posts" }
-                ul {
-                    for (id, post) in posts.iter().map(|post| post.id).zip(posts.iter()) {
-                        li { key: "{id}",
-                            Post { post: post.clone() }
+fn BlogPostFeed(
+    posts: Option<Result<Vec<BlogPost>, ServerFnError>>,
+) -> Element {
+    match posts {
+        Some(Ok(posts)) => {
+            let posts = posts.into_iter().map(|post| {
+                let deleted = use_signal(|| false);
+                (post, deleted)
+            });
+            rsx! {
+                div {
+                    h2 { "Recent Posts" }
+                    ul {
+                        for (post, deleted) in posts {
+                            li { key: "{post.id.clone()}", hidden: deleted,
+                                Post { post, deleted }
+                            }
                         }
                     }
                 }
@@ -224,16 +210,14 @@ fn BlogPostFeed() -> Element {
         },
         Some(Err(_)) => rsx! {
             div {
-                h2 {
-                    color: "red",
+                h2 { color: "red",
                     "Error fetching posts"
                 }
             }
         },
         None => rsx! {
             div {
-                h2 {
-                    color: "gray",
+                h2 { color: "gray",
                     "Loading posts..."
                 }
             }
@@ -242,7 +226,10 @@ fn BlogPostFeed() -> Element {
 }
 
 #[component]
-fn Post(post: BlogPost) -> Element {
+fn Post(
+    post: BlogPost,
+    deleted: Signal<bool>,
+) -> Element {
     let post_image_uuid = post.image_uuid.clone();
     let load_post_image = use_resource(move || {
         let post_image_uuid = post_image_uuid.clone();
@@ -267,8 +254,15 @@ fn Post(post: BlogPost) -> Element {
     });
     rsx! {
         div {
-            h2 { "Post {post.id}" }
-            p { "Posted by {post.username}" }
+            h3 { "Post {post.id}" }
+            p { "Posted by {post.username} on {post.posted_on}" }
+            if let Some(Ok(Some(avatar))) = &*load_avatar_image.read_unchecked() {
+                img {
+                    src: format!("data:image/png;base64,{}", avatar),
+                    alt: "Avatar",
+                    width: "50",
+                }
+            }
             p { "{post.text}" }
             if let Some(Ok(Some(image))) = &*load_post_image.read_unchecked() {
                 img {
@@ -277,23 +271,18 @@ fn Post(post: BlogPost) -> Element {
                     width: "200",
                 }
             }
-            if let Some(Ok(Some(avatar))) = &*load_avatar_image.read_unchecked() {
-                img {
-                    src: format!("data:image/png;base64,{}", avatar),
-                    alt: "Avatar",
-                    width: "50",
+            div { class: "blog-post-actions",
+                button {
+                    onclick: move |_| async move {
+                        if delete_blog_post(post.id).await.is_ok() {
+                            info!("Deleted post with id: {}", post.id);
+                            deleted.set(true);
+                        } else {
+                            error!("Failed to delete post with id: {}", post.id);
+                        }
+                    },
+                    "Delete"
                 }
-            }
-            button {
-                onclick: move |_| async move {
-                    if delete_blog_post(post.id).await.is_ok() {
-                        info!("Client deleted post with id: {}", post.id);
-                    } else {
-                        // TODO: Notify the user of the error
-                        error!("Client failed to delete post with id: {}", post.id);
-                    }
-                },
-                "Delete"
             }
         }
     }

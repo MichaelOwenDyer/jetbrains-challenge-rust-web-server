@@ -5,7 +5,7 @@ use image::{DynamicImage, ImageError, ImageFormat, ImageReader};
 use std::fmt::Debug;
 use std::path::PathBuf;
 use tokio::try_join;
-use tracing::{debug, instrument, trace, warn};
+use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 /// Errors that can occur when processing images.
@@ -77,23 +77,23 @@ pub async fn process_images(
 ) -> Result<(Option<PostImagePath>, Option<AvatarImagePath>), AppImageError> {
     match (post_image_bytes, avatar_url) {
         (None, None) => {
-            trace!("No images to process");
+            debug!("No images to process");
             Ok((None, None))
         }
         (Some(post_image), None) => {
-            trace!("Processing post image");
+            debug!("Processing post image");
             let image = process_image(post_image).await?;
             let image_path = save(image).await?;
             Ok((Some(image_path), None))
         }
         (None, Some(avatar_url)) => {
-            trace!("Processing avatar image");
+            debug!("Processing avatar image");
             let avatar = process_avatar(avatar_url).await?;
             let avatar_path = save(avatar).await?;
             Ok((None, Some(avatar_path)))
         }
         (Some(post_image), Some(avatar_url)) => {
-            trace!("Processing post and avatar images");
+            debug!("Processing post and avatar images");
             let (image, avatar) = try_join!(process_image(post_image), process_avatar(avatar_url))?;
             let (image_path, avatar_path) = try_join!(save(image), save(avatar))?;
             Ok((Some(image_path), Some(avatar_path)))
@@ -135,7 +135,6 @@ async fn decode(image_bytes: Vec<u8>) -> Result<DynamicImage, ImageError> {
 /// Save the image to the file system.
 /// This creates a new UUID for the image, saves the image to the corresponding file path,
 /// and returns the UUID in the corresponding newtype.
-#[instrument(skip(image))]
 async fn save<Path: ImagePath>(image: DynamicImage) -> Result<Path, AppImageError> {
     tokio::task::spawn_blocking(move || {
         let image_path = Path::new(Uuid::new_v4());
@@ -153,7 +152,6 @@ async fn save<Path: ImagePath>(image: DynamicImage) -> Result<Path, AppImageErro
 }
 
 /// Loads the image from the file system with the provided UUID.
-#[instrument]
 #[rustfmt::skip]
 pub async fn load<I: ImagePath>(image_uuid: &I) -> Result<Vec<u8>, AppImageError> {
     let path = image_uuid.path();
@@ -167,7 +165,6 @@ pub async fn load<I: ImagePath>(image_uuid: &I) -> Result<Vec<u8>, AppImageError
 
 /// Deletes an image from the file system if it exists.
 /// This function accepts an optional for convenience (see call site).
-#[instrument]
 pub async fn delete<I: ImagePath>(image_uuid: Option<&I>) -> Result<(), AppImageError> {
     match image_uuid {
         None => Ok(()),
