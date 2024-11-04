@@ -22,24 +22,29 @@ enum Route {
 #[allow(non_snake_case)]
 pub fn Webapp() -> Element {
     rsx! {
-        Router::<Route> {}
+        body {
+            Router::<Route> {}
+        }
     }
 }
 
 #[component]
 fn PageNotFound(route: Vec<String>) -> Element {
     rsx! {
-        h1 { "Page not found" }
-        p { "The page you requested doesn't exist." }
-        pre { color: "red", "Attempted to navigate to: {route:?}" }
+        div { class: "container",
+            h1 { "Page not found" }
+            p { "The page you requested doesn't exist." }
+        }
     }
 }
 
 #[component]
 fn HomePage() -> Element {
     rsx! {
-        div {
-            h1 { "Welcome to the blog" }
+        div { class: "container",
+            h1 { class: "header",
+                "Welcome to the blog"
+            }
             BlogPostForm {}
             BlogPostFeed {}
         }
@@ -52,82 +57,69 @@ fn BlogPostForm() -> Element {
     let mut username_input = use_signal(String::new);
     let mut image_input = use_signal(|| None);
     let mut avatar_input = use_signal(String::new);
-    let mut error_msg = use_signal(|| Cow::from(""));
+    let mut message = use_signal(|| ("red", Cow::from("")));
 
-    let handle_submit = move |_| {
-        async move {
-            let text = text_input.read();
-            let username = username_input.read();
-            if text.is_empty() {
-                error_msg.set(Cow::from("Post text cannot be empty"));
-                return;
-            }
-            if username.is_empty() {
-                error_msg.set(Cow::from("Username cannot be empty"));
-                return;
-            }
-            let image = image_input.read();
-            let avatar_url = avatar_input.read();
-            let params = CreateBlogPostParams {
-                text: text.clone(),
-                username: username.clone(),
-                image: image.clone(),
-                avatar_url: if avatar_url.is_empty() {
-                    None
-                } else {
-                    Some(avatar_url.clone())
-                },
-            };
+    let handle_submit = move |_| async move {
+        message.set(("yellow", Cow::from("Posting...")));
 
-            match create_blog_post(params).await {
-                Ok(post) => {
-                    info!("Created post: {:?}", post);
-                    error_msg.set(Cow::from(""));
-                    // text.set(String::new());
-                    // username.set(String::new());
-                    // image.set(None);
-                    // avatar_url.set(String::new());
-                }
-                Err(err) => {
-                    error!("Failed to create post: {:?}", err);
-                    error_msg.set(Cow::from(format!("Failed to create post: {:?}", err)));
-                }
+        let params = CreateBlogPostParams {
+            text: text_input().clone(),
+            username: username_input().clone(),
+            image: image_input().clone(),
+            avatar_url: if avatar_input().is_empty() {
+                None
+            } else {
+                Some(avatar_input().clone())
+            },
+        };
+
+        if let Err(msg) = params.validate() {
+            message.set(("red", Cow::from(msg)));
+            return;
+        }
+
+        match create_blog_post(params).await {
+            Ok(post) => {
+                info!("Created post: {:?}", post);
+                message.set(("green", Cow::from("Post created!")));
+                text_input.set(String::new());
+                username_input.set(String::new());
+                image_input.set(None);
+                avatar_input.set(String::new());
+            }
+            Err(err) => {
+                error!("Failed to create post: {:?}", err);
+                message.set(("red", Cow::from(err.to_string())));
             }
         }
     };
 
     rsx! {
-        form {
-            // prevent_default: "onsubmit",
-            // onsubmit: handle_submit,
-            class: "blogpost-form",
+        form { class: "blog-post-form",
 
             // Username Input
-            div { class: "input-container",
-                label { "Username:" }
+            div {
+                label { "Who are you?" }
+                label { "What's on your mind?" }
+            }
+
+            // Text Area for the Post
+            div {
                 input {
                     r#type: "text",
                     value: "{username_input}",
                     placeholder: "Enter your username",
                     oninput: move |evt| username_input.set(evt.value()),
                 }
-            }
-
-            // Text Area for the Post
-            div { class: "input-container",
-                label { "What's on your mind?" }
-                div {
-                    textarea {
-                        value: "{text_input}",
-                        placeholder: "Write your post here...",
-                        oninput: move |evt| text_input.set(evt.value()),
-                    }
+                textarea {
+                    value: "{text_input}",
+                    placeholder: "Write your post here...",
+                    oninput: move |evt| text_input.set(evt.value()),
                 }
             }
 
             // Image File Upload
-            div { class: "input-container",
-                label { "Upload Image:" }
+            div {
                 input {
                     r#type: "file",
                     accept: "image/png",
@@ -149,92 +141,36 @@ fn BlogPostForm() -> Element {
             }
 
             // Avatar URL
-            div { class: "input-container",
-                label { "Avatar URL (optional):" }
+            div {
                 input {
                     r#type: "url",
                     value: "{avatar_input}",
-                    placeholder: "Enter your avatar URL",
+                    placeholder: "Avatar URL (optional)",
                     oninput: move |evt| avatar_input.set(evt.value()),
+                }
+                if !avatar_input().is_empty() {
+                    div {
+                        img {
+                            src: "{avatar_input}",
+                            alt: "Avatar",
+                            width: "50",
+                        }
+                    }
                 }
             }
 
             // Submit Button
-            div { class: "input-container",
-                button {
+            div {
+                button { class: "post-btn",
                     r#type: "submit",
                     prevent_default: "onclick",
                     onclick: handle_submit,
                     "Submit Post"
                 }
-            }
-        }
-        div {
-            color: "red",
-            "{error_msg}"
-        }
-    }
-}
-
-#[component]
-fn BlogPostForm1() -> Element {
-    let mut input = use_signal(CreateBlogPostParams::default);
-    let mut error_msg = use_signal(|| Cow::from(""));
-
-    let submit_post = move |_| {
-        let params = input();
-
-        async move {
-            match create_blog_post(params).await {
-                Ok(post) => {
-                    info!("Created post: {:?}", post);
-                    error_msg.set(Cow::from(""));
-                    input.set(CreateBlogPostParams::default());
+                label { class: "error",
+                    color: "{message().0}",
+                    "{message().1}"
                 }
-                Err(err) => {
-                    info!("Failed to create post: {:?}", err);
-                    error_msg.set(Cow::from(format!("Failed to create post: {:?}", err)));
-                }
-            }
-        }
-    };
-
-    rsx! {
-        div {
-            form {
-                border: "1px solid black",
-                h3 { "Username" }
-                input {
-                    value: "{input.read().username}",
-                    oninput: move |e| input.write().username = e.value(),
-                }
-                h3 { "Post text" }
-                textarea {
-                    value: "{input.read().text}",
-                    oninput: move |e| input.write().text = e.value(),
-                }
-                h3 { "Image" }
-                FileUpload {
-                    accept: ".png",
-                    onchange: move |bytes: Vec<u8>| {
-                        input.write().image = Some(bytes);
-                    },
-                }
-                h3 { "Avatar Image URL" }
-                input {
-                    r#type: "url",
-                    accept: ".png",
-                    onchange: move |url| input.write().avatar_url = Some(url.value()),
-                }
-                button {
-                    r#type: "submit",
-                    onclick: submit_post,
-                    "Submit Post"
-                }
-            }
-            div {
-                color: "red",
-                "{error_msg}"
             }
         }
     }
@@ -307,25 +243,47 @@ fn BlogPostFeed() -> Element {
 
 #[component]
 fn Post(post: BlogPost) -> Element {
+    let post_image_uuid = post.image_uuid.clone();
+    let load_post_image = use_resource(move || {
+        let post_image_uuid = post_image_uuid.clone();
+        async move {
+            if let Some(image_uuid) = &post_image_uuid {
+                load_post_image(image_uuid.clone()).await.map(Some)
+            } else {
+                Ok(None)
+            }
+        }
+    });
+    let avatar_image_uuid = post.avatar_uuid.clone();
+    let load_avatar_image = use_resource(move || {
+        let avatar_image_uuid = avatar_image_uuid.clone();
+        async move {
+            if let Some(avatar_uuid) = &avatar_image_uuid {
+                load_avatar_image(avatar_uuid.clone()).await.map(Some)
+            } else {
+                Ok(None)
+            }
+        }
+    });
     rsx! {
         div {
             h2 { "Post {post.id}" }
             p { "Posted by {post.username}" }
             p { "{post.text}" }
-            // if let Some(Ok(Some(bytes))) = &*fetch_post_image.read_unchecked() {
-            //     img {
-            //         src: format!("data:image/png;base64,{}", base64::encode(bytes)),
-            //         alt: "Post image",
-            //         width: "200",
-            //     }
-            // }
-            // if let Some(Ok(Some(avatar))) = &*fetch_avatar_image.read_unchecked() {
-            //     img {
-            //         src: format!("data:image/png;base64,{}", base64::encode(avatar)),
-            //         alt: "Avatar image",
-            //         width: "50",
-            //     }
-            // }
+            if let Some(Ok(Some(image))) = &*load_post_image.read_unchecked() {
+                img {
+                    src: format!("data:image/png;base64,{}", image),
+                    alt: "Post image",
+                    width: "200",
+                }
+            }
+            if let Some(Ok(Some(avatar))) = &*load_avatar_image.read_unchecked() {
+                img {
+                    src: format!("data:image/png;base64,{}", avatar),
+                    alt: "Avatar",
+                    width: "50",
+                }
+            }
             button {
                 onclick: move |_| async move {
                     if delete_blog_post(post.id).await.is_ok() {

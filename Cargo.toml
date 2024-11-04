@@ -4,19 +4,14 @@ version = "0.1.0"
 authors = ["Michael Dyer <michaelowendyer@gmail.com>"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 serde = { version = "1.0.197", features = ["derive"] }
 dioxus = { version = "0.5", features = ["fullstack", "router"] }
 dioxus-logger = "0.5.1" # Contains logging abstraction over tracing
-time = { version = "0.3.36", features = ["serde"] }
 tracing = { version = "0.1.40" }
-uuid = { version = "1.10.0", features = ["v4", "serde", "js"] }
+time = { version = "0.3.36", features = ["serde"] }
 derive_more = { version = "1.0.0", features = ["from", "display", "error"] }
 dotenvy = "0.15.7"
-image = "0.25.4"
-base64 = "0.22.1"
 
 # Server-only dependencies
 tokio = { version = "1.40.0", optional = true }
@@ -25,21 +20,24 @@ diesel = { version = "2.2.4", features = ["sqlite", "returning_clauses_for_sqlit
 diesel_migrations = { version = "2.2.0", features = ["sqlite"], optional = true }
 r2d2 = { version = "0.8.10", optional = true }
 http = { version = "1.1.0", optional = true }
+uuid = { version = "1.10.0", features = ["v4", "serde", "js"], optional = true }
 reqwest = { version = "0.12.8", optional = true }
-futures = { version = "0.3.31", optional = true }
-tower-http = { version = "0.6.1", features = ["trace"] }
+image = { version = "0.25.4", optional = true }
+base64 = { version = "0.22.1", optional = true }
 
 [features]
 server = [
+    "dioxus/axum",
     "tokio",
     "axum",
-    "dioxus/axum",
     "diesel",
     "diesel_migrations",
     "r2d2",
     "http",
+    "uuid",
     "reqwest",
-    "futures",
+    "image",
+    "base64",
 ]
 web = [
     "dioxus/web",

@@ -17,6 +17,18 @@ pub struct CreateBlogPostParams {
     pub avatar_url: Option<String>,
 }
 
+impl CreateBlogPostParams {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.text.is_empty() {
+            return Err("The blog post text cannot be empty");
+        }
+        if self.username.is_empty() {
+            return Err("The username cannot be empty");
+        }
+        Ok(())
+    }
+}
+
 /// The file system path of a blog post image.
 /// This is a newtype around a `String`, which is the UUID of the image.
 /// The UUID is persisted to the database, and is used to load the image from the file system later.

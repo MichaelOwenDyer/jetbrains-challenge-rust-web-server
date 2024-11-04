@@ -5,7 +5,7 @@ use image::{DynamicImage, ImageError, ImageFormat, ImageReader};
 use std::fmt::Debug;
 use std::path::PathBuf;
 use tokio::try_join;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument, trace, warn};
 use uuid::Uuid;
 
 /// Errors that can occur when processing images.
@@ -77,23 +77,23 @@ pub async fn process_images(
 ) -> Result<(Option<PostImagePath>, Option<AvatarImagePath>), AppImageError> {
     match (post_image_bytes, avatar_url) {
         (None, None) => {
-            debug!("No images to process");
+            trace!("No images to process");
             Ok((None, None))
         }
         (Some(post_image), None) => {
-            debug!("Processing post image");
+            trace!("Processing post image");
             let image = process_image(post_image).await?;
             let image_path = save(image).await?;
             Ok((Some(image_path), None))
         }
         (None, Some(avatar_url)) => {
-            debug!("Processing avatar image");
+            trace!("Processing avatar image");
             let avatar = process_avatar(avatar_url).await?;
             let avatar_path = save(avatar).await?;
             Ok((None, Some(avatar_path)))
         }
         (Some(post_image), Some(avatar_url)) => {
-            debug!("Processing post and avatar images");
+            trace!("Processing post and avatar images");
             let (image, avatar) = try_join!(process_image(post_image), process_avatar(avatar_url))?;
             let (image_path, avatar_path) = try_join!(save(image), save(avatar))?;
             Ok((Some(image_path), Some(avatar_path)))
@@ -160,7 +160,7 @@ pub async fn load<I: ImagePath>(image_uuid: &I) -> Result<Vec<u8>, AppImageError
     tokio::task::spawn_blocking(move || std::fs::read(path))
         .await
         .expect("loading should not panic")
-        .inspect(|_| debug!("Loaded image from {}", image_uuid.path().display()))
+        .inspect(|_| trace!("Loaded image from {}", image_uuid.path().display()))
         .inspect_err(|e| warn!("Failed to load image from {}: {}", image_uuid.path().display(), e))
         .map_err(Into::into)
 }
